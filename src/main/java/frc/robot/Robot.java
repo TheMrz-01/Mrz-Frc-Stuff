@@ -10,19 +10,13 @@ import com.revrobotics.CANSparkMax;
 import edu.wpi.first.wpilibj.AnalogGyro;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.Encoder;
-import edu.wpi.first.wpilibj.simulation.AnalogGyroSim;
 import edu.wpi.first.wpilibj.simulation.EncoderSim;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
-
-import com.ctre.phoenix.motorcontrol.InvertType;
-
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
-import edu.wpi.first.wpilibj.motorcontrol.Spark;
 import edu.wpi.first.wpilibj.PS4Controller;
-import edu.wpi.first.math.*;
 
 /**
  * The VM is configured to automatically run this class, and to call the functions corresponding to
@@ -60,7 +54,7 @@ public class Robot extends TimedRobot {
   EncoderSim rightEncoderSim = new EncoderSim(rightEncoder);
 
   //This 2 lines break the simulation
-  AnalogGyro gyro = new AnalogGyro(4);
+  AnalogGyro gyro = new AnalogGyro(5);
   //AnalogGyroSim gyroSim = new AnalogGyroSim(gyro);
   //Simple PID with gyro setting a head point in the beginning 
   double heading = gyro.getAngle();
@@ -225,10 +219,11 @@ public class Robot extends TimedRobot {
 
   /** This function is called once when the robot is first started up. */
   @Override
-  public void simulationInit() {}
+  public void simulationInit() {
+  }
 
   /** This function is called periodically whilst in simulation. */
   @Override
-  public void simulationPeriodic() {
+  public void simulationPeriodic(){
   }
 }
