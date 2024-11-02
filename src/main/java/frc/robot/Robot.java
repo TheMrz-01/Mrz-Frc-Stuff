@@ -7,9 +7,11 @@ package frc.robot;
 import com.ctre.phoenix.motorcontrol.can.WPI_TalonSRX;
 import com.revrobotics.CANSparkLowLevel;
 import com.revrobotics.CANSparkMax;
-import edu.wpi.first.wpilibj.AnalogGyro;
+//Normal analog gyro breaks the sim
+//import edu.wpi.first.wpilibj.AnalogGyro;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.Encoder;
+import edu.wpi.first.wpilibj.simulation.AnalogGyroSim;
 import edu.wpi.first.wpilibj.simulation.EncoderSim;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
@@ -54,8 +56,8 @@ public class Robot extends TimedRobot {
   EncoderSim rightEncoderSim = new EncoderSim(rightEncoder);
 
   //This 2 lines break the simulation
-  AnalogGyro gyro = new AnalogGyro(5);
-  //AnalogGyroSim gyroSim = new AnalogGyroSim(gyro);
+  //AnalogGyro gyro = new AnalogGyro(5);
+  AnalogGyroSim gyro = new AnalogGyroSim(5);
   //Simple PID with gyro setting a head point in the beginning 
   double heading = gyro.getAngle();
   double kP = 1;
@@ -79,9 +81,9 @@ public class Robot extends TimedRobot {
 
     SmartDashboard.putData("Field", field);
 
-    gyro.reset();
+    //gyro.reset();
     //Might delete this later idk
-    gyro.calibrate();
+    //gyro.calibrate();
 
     //Set the leader for the left side
     L_TalonSRX2.follow(L_TalonSRX1);
