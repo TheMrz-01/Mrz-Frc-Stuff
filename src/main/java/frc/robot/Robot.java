@@ -7,15 +7,33 @@ package frc.robot;
 import com.ctre.phoenix.motorcontrol.can.WPI_TalonSRX;
 import com.revrobotics.CANSparkLowLevel;
 import com.revrobotics.CANSparkMax;
-import edu.wpi.first.wpilibj.AnalogGyro;
+
+import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.math.system.plant.DCMotor;
+import edu.wpi.first.math.util.Units;
+//Normal analog gyro breaks the sim
+//import edu.wpi.first.wpilibj.AnalogGyro;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.Encoder;
+import edu.wpi.first.wpilibj.simulation.AnalogGyroSim;
+import edu.wpi.first.wpilibj.simulation.BatterySim;
 import edu.wpi.first.wpilibj.simulation.EncoderSim;
+import edu.wpi.first.wpilibj.simulation.RoboRioSim;
+import edu.wpi.first.wpilibj.simulation.SingleJointedArmSim;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
+import edu.wpi.first.wpilibj.smartdashboard.Mechanism2d;
+import edu.wpi.first.wpilibj.smartdashboard.MechanismLigament2d;
+import edu.wpi.first.wpilibj.smartdashboard.MechanismRoot2d;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj.util.Color;
+import edu.wpi.first.wpilibj.util.Color8Bit;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
+import edu.wpi.first.wpilibj.motorcontrol.PWMSparkMax;
+import edu.wpi.first.wpilibj.PS4Controller;
+import edu.wpi.first.wpilibj.Preferences;
+import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj.PS4Controller;
 
 /**
@@ -32,39 +50,51 @@ public class Robot extends TimedRobot {
 
   PS4Controller driverController = new PS4Controller(0);
 
-  WPI_TalonSRX L_TalonSRX1 = new WPI_TalonSRX(0);
-  WPI_TalonSRX L_TalonSRX2 = new WPI_TalonSRX(1);
-  WPI_TalonSRX L_TalonSRX3 = new WPI_TalonSRX(2);
-  WPI_TalonSRX L_TalonSRX4 = new WPI_TalonSRX(3);
-  WPI_TalonSRX R_TalonSRX1 = new WPI_TalonSRX(4);
-  WPI_TalonSRX R_TalonSRX2 = new WPI_TalonSRX(5);
-  WPI_TalonSRX R_TalonSRX3 = new WPI_TalonSRX(6);
-  WPI_TalonSRX R_TalonSRX4 = new WPI_TalonSRX(7);
+  double armKp = 50.0;
+  double armSetpointDegrees = 75.0;
 
-  CANSparkMax SparkMax = new CANSparkMax(0, CANSparkLowLevel.MotorType.kBrushless);
+  DCMotor armGearbox = DCMotor.getVex775Pro(2);
 
-  DifferentialDrive robotDrive = new DifferentialDrive(L_TalonSRX1::set,R_TalonSRX1::set);
+  PIDController controller = new PIDController(armKp, 0, 0);
 
-  Field2d field = new Field2d();
+  Encoder encoder =
+      new Encoder(0, 1);
+  PWMSparkMax motor = new PWMSparkMax(2);
 
-  Encoder leftEncoder = new Encoder(0, 1);
-  Encoder rightEncoder = new Encoder(2, 3);
+  SingleJointedArmSim armSim =
+      new SingleJointedArmSim(
+          armGearbox,
+          200,
+          SingleJointedArmSim.estimateMOI(Units.inchesToMeters(30), 8.0),
+          Units.inchesToMeters(30),
+          Units.degreesToRadians(-75),
+          Units.degreesToRadians(255),
+          true,
+          0
+          //2.0 * Math.PI / 4096,
+          //0.0
+          );
 
-  EncoderSim leftEncoderSim = new EncoderSim(leftEncoder);
-  EncoderSim rightEncoderSim = new EncoderSim(rightEncoder);
+  EncoderSim encoderSim = new EncoderSim(encoder);
 
-  //This 2 lines break the simulation
-  AnalogGyro gyro = new AnalogGyro(5);
-  //AnalogGyroSim gyroSim = new AnalogGyroSim(gyro);
-  //Simple PID with gyro setting a head point in the beginning 
-  double heading = gyro.getAngle();
-  double kP = 1;
+  Mechanism2d mech2d = new Mechanism2d(90, 90);
+  MechanismRoot2d armPivot = mech2d.getRoot("ArmPivot", 30, 30);
+  MechanismLigament2d armTower =
+      armPivot.append(new MechanismLigament2d(
+        "ArmTower",
+         30,-90,
+          10,
+          new Color8Bit(Color.kDarkGray)
+        ));
 
-  DigitalInput toplimitSwitch = new DigitalInput(5);
-  DigitalInput middlelimitSwitch = new DigitalInput(6);
-  DigitalInput bottomlimitSwitch = new DigitalInput(7);
-
-  boolean isMiddleIgnored = false;
+  MechanismLigament2d arm =
+      armPivot.append(
+          new MechanismLigament2d(
+              "Arm",
+              30,
+              Units.radiansToDegrees(armSim.getAngleRads()),
+              6,
+              new Color8Bit(Color.kYellow)));
 
   /**
    * This function is run when the robot is first started up and should be used for any
@@ -77,25 +107,13 @@ public class Robot extends TimedRobot {
     m_chooser.addOption("My Auto", kCustomAuto);
     SmartDashboard.putData("Auto choices", m_chooser);
 
-    SmartDashboard.putData("Field", field);
+    encoder.setDistancePerPulse(2.0 * Math.PI / 4096);
+    //SmartDashboard.putData("Arm Sim", mech2d);
+    SmartDashboard.putData("Arm Sim", mech2d);
+    armTower.setColor(new Color8Bit(Color.kBlue));
 
-    gyro.reset();
-    //Might delete this later idk
-    gyro.calibrate();
-
-    //Set the leader for the left side
-    L_TalonSRX2.follow(L_TalonSRX1);
-    L_TalonSRX3.follow(L_TalonSRX1);
-    L_TalonSRX4.follow(L_TalonSRX1);
-
-    //Set the leader for the right side
-    R_TalonSRX2.follow(R_TalonSRX1);
-    R_TalonSRX2.follow(R_TalonSRX1);
-    R_TalonSRX2.follow(R_TalonSRX1);
-
-    //Set inverted so it doesnt make tokyo drift type shi
-    //INVERTING THE LEFT SIDE!!!
-    L_TalonSRX1.setInverted(true);
+    Preferences.initDouble("ArmPosition", armSetpointDegrees);
+    Preferences.initDouble("ArmP", armKp);
   }
 
   /**
@@ -133,77 +151,33 @@ public class Robot extends TimedRobot {
         break;
       case kDefaultAuto:
       default:
-        double error = heading - gyro.getAngle();
-        robotDrive.tankDrive(.5 + kP * error, .5 - kP * error);
         break;
     }
   }
 
   /** This function is called once when teleop is enabled. */
   @Override
-  public void teleopInit() {}
+  public void teleopInit() {
+    loadPreferences();
+  }
 
   /** This function is called periodically during operator control. */
   @Override
   public void teleopPeriodic() {
-    if(toplimitSwitch.get()){
-      SparkMax.set(0);
+    if (driverController.getCircleButton()) {
+      // Here, we run PID control like normal.
+      reachSetpoint();
+    } else {
+      // Otherwise, we disable the motor.
+      stop();
     }
-    else if(middlelimitSwitch.get() && !isMiddleIgnored){
-      SparkMax.set(0);      
-    }
-    else if(bottomlimitSwitch.get()){
-      SparkMax.set(0);      
-    }
-
-    //To go up
-    if(driverController.getCircleButton()){
-      isMiddleIgnored = false;
-      if (toplimitSwitch.get()) {
-        SparkMax.set(0);
-      }
-      else{
-        SparkMax.set(kDefaultPeriod);
-      }
-    }
-    //To go mid
-    if(driverController.getTriangleButton()){
-      isMiddleIgnored = true;
-      if(middlelimitSwitch.get()) {
-        SparkMax.set(0);    
-      }
-      else if(toplimitSwitch.get()){
-        SparkMax.set(-kDefaultPeriod);
-      }
-      else {
-        SparkMax.set(kDefaultPeriod);
-      }
-    }
-    //To go down  
-    if(driverController.getSquareButton()){
-      isMiddleIgnored = false;
-      if (bottomlimitSwitch.get()) {
-        SparkMax.set(0);  
-      }
-      else{
-        SparkMax.set(-kDefaultPeriod);
-      }     
-    }
-
-    //Drivetrain code
-
-    //Get the values from ps4 controller and multiply by 0.8
-    double robotDriveLeftY = driverController.getLeftY() * 0.8;
-    double robotDriveRightX = driverController.getRightX() * 0.8;
-
-    robotDrive.arcadeDrive(robotDriveLeftY,robotDriveRightX);
-
-    System.out.println("Left Y: " + (robotDriveLeftY) + " Right X: " + (robotDriveRightX));
   }
 
   /** This function is called once when the robot is disabled. */
   @Override
-  public void disabledInit() {}
+  public void disabledInit() {
+    stop();
+  }
 
   /** This function is called periodically when disabled. */
   @Override
@@ -225,5 +199,44 @@ public class Robot extends TimedRobot {
   /** This function is called periodically whilst in simulation. */
   @Override
   public void simulationPeriodic(){
+    armSim.setInput(motor.get() * RobotController.getBatteryVoltage());
+
+    armSim.update(0.020);
+
+    encoderSim.setDistance(armSim.getAngleRads());
+    RoboRioSim.setVInVoltage(
+        BatterySim.calculateDefaultBatteryLoadedVoltage(armSim.getCurrentDrawAmps()));
+
+    arm.setAngle(Units.radiansToDegrees(armSim.getAngleRads()));
+  }
+
+  public void loadPreferences() {
+    // Read Preferences for Arm setpoint and kP on entering Teleop
+    armSetpointDegrees = Preferences.getDouble("ArmPosition", armSetpointDegrees);
+    if (armKp != Preferences.getDouble("ArmP", armKp)) {
+      armKp = Preferences.getDouble("ArmP", armKp);
+      controller.setP(armKp);
+    }
+  }
+
+  public void reachSetpoint() {
+    var pidOutput =
+        controller.calculate(
+            encoder.getDistance(), Units.degreesToRadians(armSetpointDegrees));
+    motor.setVoltage(pidOutput);
+  }
+
+  public void stop() {
+    motor.set(0.0);
+  }
+
+  public void close() {
+    motor.close();
+    encoder.close();
+    mech2d.close();
+    armPivot.close();
+    controller.close();
+    arm.close();
+    super.close();
   }
 }
